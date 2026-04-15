@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+pydantic-settings
+langchain
+langchain-openai
+langchain-community
+dashscope
+chromadb
+python-dotenv
+openai
+requests
+python-multipart
