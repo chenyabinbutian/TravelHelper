@@ -1,16 +1,7 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
+import { Send, Loader2, Plane, MapPin, User, Bot } from 'lucide-vue-next';
 import { marked } from 'marked';
-import { 
-  Send, 
-  MapPin, 
-  Camera, 
-  Utensils, 
-  Palmtree, 
-  Navigation,
-  Sparkles,
-  Loader2
-} from 'lucide-vue-next';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -40,9 +31,7 @@ const sendMessage = async () => {
   query.value = '';
   isLoading.value = true;
   
-  // 先加入一个空的 AI 消息对象，用于后续追加流
   const assistantMsgIndex = messages.value.push({ role: 'assistant', content: '' }) - 1;
-  
   await scrollToBottom();
 
   try {
@@ -52,52 +41,43 @@ const sendMessage = async () => {
       body: JSON.stringify({ 
         query: userQuery, 
         location: location.value,
-        history: messages.value.slice(0, -2) // 仅发送“之前”的对话，排除当前这一轮的提问和空回复
+        history: messages.value.slice(0, -2)
       })
     });
 
     if (!response.body) throw new Error('No body');
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    
+
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      
+
       const chunk = decoder.decode(value);
-      // 处理 SSE 格式 (data: {...}\n\n)
       const lines = chunk.split('\n');
+      
       for (const line of lines) {
         if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6);
-          if (dataStr === '[DONE]') break;
+          const data = line.slice(6);
+          if (data === '[DONE]') break;
           try {
-            const data = JSON.parse(dataStr);
-            messages.value[assistantMsgIndex].content += data.content;
+            const parsed = JSON.parse(data);
+            messages.value[assistantMsgIndex].content += parsed.content;
             await scrollToBottom();
-          } catch (e) {
-            console.error("JSON Parse Error", e);
-          }
+          } catch (e) { /* ignore parse errors */ }
         }
       }
     }
   } catch (error) {
-    messages.value[assistantMsgIndex].content = '抱歉，连接服务器失败。请确保后端 API 已启动且 Key 正确。';
+    messages.value[assistantMsgIndex].content = '抱歉，服务出现了一点问题。请稍后再试。';
   } finally {
     isLoading.value = false;
-    await scrollToBottom();
   }
 };
 
 const renderContent = (content: string) => {
   if (!content) return '';
-  
-  // 1. 先进行标准 Markdown 渲染 (表格、图片)
-  // 将旧的不稳定 Unsplash 链接替换为更稳健的关键词获取方式
   let html = marked(content);
-
-  // 2. 将 [MAP_LOCATION: 名称 | 地址 | 搜索词] 解析为动态搜索地图
-  // 我们使用 OpenStreetMap 或简单的 Google Map 搜索链接模拟
   html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (match, name, addr, search) => {
     const query = encodeURIComponent(`${name} ${location.value}`);
     return `<div class="map-card glass">
@@ -110,55 +90,37 @@ const renderContent = (content: string) => {
       <div class="map-footer">${addr}</div>
     </div>`;
   });
-
   return html;
 };
 </script>
 
 <template>
   <div class="app-container">
-    <aside class="sidebar glass">
-      <div class="brand">
-        <Sparkles class="brand-icon" />
-        <h1>TravelHelper AI</h1>
+    <header class="top-nav glass">
+      <div class="nav-content">
+        <div class="brand">
+          <Plane class="brand-icon" :size="24" />
+          <span class="brand-name">TravelHelper AI</span>
+        </div>
+        <div class="location-picker-compact glass">
+          <MapPin :size="16" />
+          <input v-model="location" placeholder="当前城市..." />
+        </div>
       </div>
-      <div class="location-picker">
-        <MapPin :size="18" />
-        <input v-model="location" placeholder="当前城市..." />
-      </div>
-      <nav class="quick-actions">
-        <button @click="setQuickQuery('推荐一些地道美食')" class="action-btn">
-          <Utensils :size="18" /> <span>美食推荐</span>
-        </button>
-        <button @click="setQuickQuery('帮我规划一条游玩路线')" class="action-btn">
-          <Navigation :size="18" /> <span>旅游路线</span>
-        </button>
-        <button @click="setQuickQuery('Pocket 3 拍摄参数设置')" class="action-btn active">
-          <Camera :size="18" /> <span>摄影参数</span>
-        </button>
-        <button @click="setQuickQuery('附近的高评分住宿')" class="action-btn">
-          <Palmtree :size="18" /> <span>特色住宿</span>
-        </button>
-      </nav>
-      <div class="footer"><p>Interview Demo v0.1</p></div>
-    </aside>
+    </header>
 
     <main class="chat-area">
       <div class="messages-container" ref="chatContainer">
-        <div v-for="(msg, index) in messages" :key="index" 
+        <div v-for="(msg, idx) in messages" :key="idx" 
              :class="['message-wrapper', msg.role]">
-          <div class="avatar">
-            <Sparkles v-if="msg.role === 'assistant'" :size="20" />
-            <div v-else class="user-avatar">ME</div>
+          <div class="avatar glass">
+            <User v-if="msg.role === 'user'" :size="20" />
+            <Bot v-else :size="20" />
           </div>
-          <!-- 如果消息内容为空且正在加载，显示加载状态 -->
-          <div v-if="msg.role === 'assistant' && msg.content === '' && isLoading" class="message-content glass">
-            <div class="loading-state">
-              <Loader2 :size="18" class="spinning" />
-              <span>AI 正在思考中...</span>
-            </div>
+          <div v-if="msg.content === ''" class="loading-state">
+            <Loader2 class="spinning" :size="20" />
+            <span>AI 正在思考...</span>
           </div>
-          <!-- 渲染内容 -->
           <div v-else class="message-content glass">
             <div class="markdown-body" v-html="renderContent(msg.content)"></div>
           </div>
@@ -167,7 +129,7 @@ const renderContent = (content: string) => {
 
       <div class="input-section">
         <div class="input-wrapper glass">
-          <input v-model="query" @keyup.enter="sendMessage" placeholder="问问 AI 你的旅游计划..." />
+          <input v-model="query" @keyup.enter="sendMessage" placeholder="问问 AI 你的全球旅游计划..." />
           <button @click="sendMessage" :disabled="isLoading" class="send-btn">
             <Send v-if="!isLoading" :size="20" />
             <Loader2 v-else class="spinning" :size="20" />
@@ -178,50 +140,73 @@ const renderContent = (content: string) => {
   </div>
 </template>
 
-<style scoped>
-/* 保持之前的样式不变 */
-.app-container { display: flex; width: 100vw; height: 100vh; padding: 20px; gap: 20px; }
-.sidebar { width: 280px; padding: 24px; display: flex; flex-direction: column; gap: 32px; }
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand-icon { color: var(--accent-color); }
-.brand h1 { font-size: 1.25rem; font-weight: 700; }
-.location-picker { display: flex; align-items: center; gap: 10px; padding: 12px 16px; background: rgba(0, 0, 0, 0.2); border-radius: 12px; }
-.location-picker input { background: transparent; border: none; color: white; outline: none; width: 100%; }
-.quick-actions { display: flex; flex-direction: column; gap: 12px; }
-.action-btn { display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: transparent; border: none; border-radius: 12px; color: var(--text-secondary); cursor: pointer; transition: all 0.2s; text-align: left; width: 100%; }
-.action-btn:hover { background: rgba(255, 255, 255, 0.05); color: white; }
-.action-btn.active { background: rgba(56, 189, 248, 0.1); color: var(--accent-color); }
-.chat-area { flex: 1; display: flex; flex-direction: column; height: 100%; position: relative; }
-.messages-container { flex: 1; overflow-y: auto; padding: 20px 40px; display: flex; flex-direction: column; gap: 24px; }
-.message-wrapper { display: flex; gap: 16px; max-width: 85%; }
-.message-wrapper.user { align-self: flex-end; flex-direction: row-reverse; }
-.avatar { width: 40px; height: 40px; border-radius: 12px; background: var(--accent-color); display: flex; align-items: center; justify-content: center; color: #000; flex-shrink: 0; }
-.user-avatar { font-weight: bold; font-size: 12px; }
-.message-content { padding: 16px 20px; line-height: 1.6; font-size: 0.95rem; }
-.user .message-content { background: var(--accent-color); color: #000; }
-.input-section { padding: 20px 40px 40px; }
-.input-wrapper { display: flex; align-items: center; padding: 8px 8px 8px 24px; gap: 12px; }
-.input-wrapper input { flex: 1; background: transparent; border: none; color: white; font-size: 1rem; outline: none; }
-.send-btn { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-color); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
-.spinning { animation: spin 2s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-.loading-state {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--text-secondary);
+<style>
+:root {
+  --bg-color: #0f172a;
+  --accent-color: #38bdf8;
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --glass-bg: rgba(30, 41, 59, 0.7);
+  --border-color: rgba(255, 255, 255, 0.1);
 }
 
-/* Markdown 高级样式 */
-:deep(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 16px 0; background: rgba(255, 255, 255, 0.05); border-radius: 8px; overflow: hidden; }
-:deep(.markdown-body th) { background: var(--accent-color); color: #000; padding: 12px; text-align: left; }
-:deep(.markdown-body td) { padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-:deep(.markdown-body img) { max-width: 100%; border-radius: 12px; margin: 12px 0; border: 2px solid var(--border-color); }
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--bg-color); color: var(--text-primary); font-family: 'Inter', sans-serif; overflow: hidden; }
 
-/* 地图预览卡片 */
-.map-card { margin: 16px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); background: #1e293b; }
-.map-header { padding: 10px 16px; border-bottom: 1px solid var(--border-color); font-weight: 600; }
-.map-footer { padding: 8px 16px; font-size: 12px; color: var(--text-secondary); }
+.glass { background: var(--glass-bg); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 16px; }
 
-.footer { margin-top: auto; font-size: 12px; color: var(--text-secondary); text-align: center; }
+.app-container { display: flex; flex-direction: column; width: 100vw; height: 100vh; }
+
+.top-nav { height: 70px; width: 100%; display: flex; align-items: center; padding: 0 24px; position: sticky; top: 0; z-index: 100; border-radius: 0; border-top: none; border-left: none; border-right: none; }
+.nav-content { max-width: 1000px; margin: 0 auto; width: 100%; display: flex; justify-content: space-between; align-items: center; }
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-name { font-weight: 700; font-size: 1.1rem; }
+.brand-icon { color: var(--accent-color); }
+
+.location-picker-compact { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 10px; width: 180px; }
+.location-picker-compact input { background: transparent; border: none; color: white; outline: none; font-size: 13px; width: 100%; }
+
+.chat-area { flex: 1; display: flex; flex-direction: column; background: radial-gradient(circle at top right, #1e293b, #0f172a); overflow: hidden; }
+
+.messages-container { flex: 1; overflow-y: auto; padding: 30px 20px; display: flex; flex-direction: column; gap: 24px; max-width: 900px; margin: 0 auto; width: 100%; }
+
+.message-wrapper { display: flex; gap: 14px; max-width: 90%; align-self: flex-start; }
+.message-wrapper.user { align-self: flex-end; flex-direction: row-reverse; }
+
+.avatar { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--glass-bg); flex-shrink: 0; }
+.user .avatar { background: var(--accent-color); color: #000; }
+
+.message-content { padding: 14px 18px; line-height: 1.6; font-size: 0.95rem; }
+.user .message-content { background: var(--accent-color); color: #000; }
+
+.input-section { padding: 20px; width: 100%; max-width: 900px; margin: 0 auto; }
+.input-wrapper { display: flex; align-items: center; padding: 6px 6px 6px 20px; gap: 12px; }
+.input-wrapper input { flex: 1; background: transparent; border: none; color: white; font-size: 1rem; outline: none; }
+
+.send-btn { width: 44px; height: 44px; border-radius: 12px; background: var(--accent-color); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s; }
+.send-btn:hover { transform: scale(1.05); }
+
+.spinning { animation: spin 2s linear infinite; }
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* Markdown & Maps */
+:deep(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 12px 0; background: rgba(255, 255, 255, 0.05); border-radius: 8px; overflow: hidden; font-size: 13px; }
+:deep(.markdown-body th) { background: rgba(56, 189, 248, 0.2); color: var(--accent-color); padding: 10px; text-align: left; }
+:deep(.markdown-body td) { padding: 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+:deep(.markdown-body img) { max-width: 100%; border-radius: 12px; margin: 10px 0; }
+
+.map-card { margin: 12px 0; border-radius: 12px; overflow: hidden; background: #1e293b; }
+.map-header { padding: 8px 14px; border-bottom: 1px solid var(--border-color); font-size: 13px; }
+.map-footer { padding: 6px 14px; font-size: 11px; color: var(--text-secondary); }
+
+/* Mobile Adaption */
+@media (max-width: 640px) {
+  .nav-content { padding: 0 4px; }
+  .brand-name { display: none; }
+  .location-picker-compact { width: 120px; }
+  .messages-container { padding: 20px 12px; }
+  .message-wrapper { max-width: 95%; }
+  .input-section { padding: 12px; }
+}
 </style>
