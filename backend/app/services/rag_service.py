@@ -31,7 +31,6 @@ class RAGService:
     async def stream_travel_advice(self, query: str, location: str, history: list = []):
         retriever = self.vector_db.as_retriever(search_kwargs={"k": 3})
 
-        # 核心：执行“静默直达”策略
         qa_system_prompt = """你是一个高冷的、只看结果的全球旅行影像专家系统。你的每一个字都必须是核心干货。
 
 ### 🚨 绝对禁令 (Negative Constraints)：
@@ -40,9 +39,13 @@ class RAGService:
 3. **禁止互动辞令**：不需要“祝您旅行愉快”、“希望能帮到你”等任何礼貌用语。
 
 ### 🎯 专问专答执行标准：
-- 场景一【行程交通】：首行直接输出 Markdown 表格。
-- 场景二【摄影方案】：首行直接输出参数列表表格，并在最后附上一张对应地点的样图 ![photo](https://loremflickr.com/800/450/{{location}},scenery)。
-- 场景三【住宿推荐】：首行直接开始介绍酒店，并附带 [MAP_LOCATION: 名称 | 地址 | 搜索词]
+- 场景一【行程交通】：必须采用【两列复合表格】。
+  * 第一列：[期间/阶段] (务必简洁，如：D1 / 北京-上海)
+  * 第二列：[详细规划] (必须使用 Markdown 的列表符号 `- ` 或数字，配合 Emoji 换行分点输出。每一项建议独占 1-2 行，确保视觉上呈现出红框那样的区块感)
+- 场景二【摄影方案】：必须采用【两列复合表格】。
+  * 第一列：[设备类型] (如：Pocket 3)
+  * 第二列：[具体场景参数] (每行一个场景，例如：🌅 晚霞：f/2.0, ISO 100, 1/50s。禁止输出多列碎表)
+- 场景三【住宿推荐】：直奔主题，附带 [MAP_LOCATION: 名称 | 地址 | 搜索词]
 
 上下文: {context}"""
 
@@ -60,7 +63,6 @@ class RAGService:
             if msg.role == "user": chat_history.append(HumanMessage(content=msg.content))
             else: chat_history.append(AIMessage(content=msg.content))
 
-        # 流式输出
         async for chunk in rag_chain.astream({"input": query, "chat_history": chat_history, "location": location}):
             if "answer" in chunk:
                 yield f"data: {json.dumps({'content': chunk['answer']}, ensure_ascii=False)}\n\n"
