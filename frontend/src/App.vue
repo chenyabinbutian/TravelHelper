@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue';
-import { Send, Loader2, Plane, MapPin, User, Bot, Sparkles, Mic, MicOff } from 'lucide-vue-next';
+import { Send, User, Bot, Sparkles, Mic, MicOff } from 'lucide-vue-next';
 import { marked } from 'marked';
 
 interface Message {
@@ -11,14 +11,14 @@ interface Message {
 const query = ref('');
 const location = ref('');
 const messages = ref<Message[]>([
-  { role: 'assistant', content: '✨ 你好呀！我是你的【全球视觉旅行助手】。\n\n无论你想去**冰岛**拍极光、去**巴黎**拍人文，还是想了解 **DJI Pocket 3** 的最佳参数，都能在这里找到答案。准备好跟我一起出发了吗？' }
+  { role: 'assistant', content: '✨ 你好呀！我是你的【全球视觉旅行助手】。\n\n无论你想去**冰岛**拍极光、去**巴黎**拍人文，还是想了解 **DJI Pocket 3** 在任何环境下的最佳参数，都能在这里找到答案。准备好跟我一起出发了吗？' }
 ]);
 const isLoading = ref(false);
 const isListening = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
 
 // 语音识别初始化
-const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 const recognition = SpeechRecognition ? new SpeechRecognition() : null;
 if (recognition) {
   recognition.lang = 'zh-CN';
@@ -67,8 +67,8 @@ const getUserLocation = async () => {
       const res = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10`);
       const data = await res.json();
       const displayName = data.display_name || '';
-      const parts = displayName.split(',').map(p => p.trim());
-      let cityPart = parts.find(p => p.endsWith('市') || p.includes('市')) || '';
+      const parts: string[] = displayName.split(',').map((p: string) => p.trim());
+      let cityPart = parts.find((p: string) => p.endsWith('市') || p.includes('市')) || '';
       location.value = cityPart.replace(/市|省/g, ''); 
     } catch (e) {
       console.log('定位失败');
@@ -130,8 +130,9 @@ const sendMessage = async () => {
 
 const renderContent = (content: string) => {
   if (!content) return '';
-  let html = marked(content);
-  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (match, name, addr) => {
+  // 显式断言为 string，防止 marked 返回 Promise 导致 TypeScript 报错
+  let html = marked.parse(content) as string;
+  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (_match: string, name: string, addr: string) => {
     const q = encodeURIComponent(`${name} ${location.value}`);
     return `<div class="map-card">
       <div class="map-header">📍 目的地: ${name}</div>
@@ -188,6 +189,12 @@ const renderContent = (content: string) => {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap');
 
+/* 全局极简滚动条 */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.05); border-radius: 10px; transition: background 0.3s; }
+::-webkit-scrollbar-thumb:hover { background: rgba(0, 0, 0, 0.1); }
+
 :root {
   --primary: #10b981; /* 薄荷绿 */
   --bg-soft: #f1f5f9;
@@ -207,7 +214,6 @@ body { margin: 0; background: #f8fafc; color: var(--text-main); height: 100vh; o
 .brand { display: flex; align-items: center; gap: 8px; }
 .logo-box { width: 32px; height: 32px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; color: white; box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3); }
 .brand-text { font-weight: 700; color: #1e293b; letter-spacing: -0.5px; }
-.location-tag { display: flex; align-items: center; gap: 5px; background: white; padding: 4px 10px; border-radius: 20px; font-size: 12px; color: #64748b; border: 1px solid #e2e8f0; }
 
 /* 聊天区 */
 .chat-area { flex: 1; overflow-y: auto; padding: 20px; scroll-behavior: smooth; }
@@ -223,16 +229,6 @@ body { margin: 0; background: #f8fafc; color: var(--text-main); height: 100vh; o
 .assistant .bubble { background: var(--bubble-ai); border-top-left-radius: 4px; border: 1px solid #f1f5f9; }
 .user .bubble { background: var(--bubble-user); color: white; border-top-right-radius: 4px; }
 
-/* 表格卡片化 - 核心解决拥挤问题 */
-:deep(.markdown-body table) { border-collapse: collapse; margin: 10px 0; width: 100%; }
-@media (max-width: 600px) {
-  :deep(.markdown-body table) { border: 0; }
-  :deep(.markdown-body thead) { display: none; }
-  :deep(.markdown-body tr) { display: block; background: #f8fafc; border-radius: 12px; padding: 10px; margin-bottom: 10px; border: 1px solid #e2e8f0; }
-  :deep(.markdown-body td) { display: flex; justify-content: space-between; padding: 6px 0; border: none; font-size: 13px; border-bottom: 1px dashed #e2e8f0; }
-  :deep(.markdown-body td:last-child) { border-bottom: none; }
-  :deep(.markdown-body td::before) { content: attr(data-label); font-weight: bold; color: var(--primary); margin-right: 15px; }
-}
 /* 消息气泡内的表格样式 - 核心修复 */
 .bubble table { 
   width: 100%; 
