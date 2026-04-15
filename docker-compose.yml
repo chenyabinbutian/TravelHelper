@@ -2,17 +2,21 @@ version: '3.8'
 
 services:
   backend:
-    build: ./backend
-    ports:
-      - "8000:8000"
+    build: 
+      context: ./backend
     env_file:
       - ./backend/.env
     volumes:
-      - ./data:/app/data
+      - ./backend/data:/app/data
+    ports:
+      - "8000:8000"
+    restart: always
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
     ports:
       - "80:80"
     depends_on:
       - backend
+    restart: always
