@@ -29,7 +29,7 @@ async def startup_event():
 async def stream_chat(request: ChatRequest):
     """SSE 流式对话接口"""
     return StreamingResponse(
-        rag_service.stream_travel_advice(request.query, request.location),
+        rag_service.stream_travel_advice(request.query, request.location, request.history),
         media_type="text/event-stream"
     )
 

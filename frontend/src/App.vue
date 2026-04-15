@@ -49,7 +49,11 @@ const sendMessage = async () => {
     const response = await fetch('/api/v1/chat/stream', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: userQuery, location: location.value })
+      body: JSON.stringify({ 
+        query: userQuery, 
+        location: location.value,
+        history: messages.value.slice(0, -2) // 仅发送“之前”的对话，排除当前这一轮的提问和空回复
+      })
     });
 
     if (!response.body) throw new Error('No body');
