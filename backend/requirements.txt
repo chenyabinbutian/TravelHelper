@@ -1,12 +1,11 @@
 fastapi
 uvicorn
-pydantic-settings
+python-dotenv
 langchain
-langchain-openai
+langchain-core
 langchain-community
+langchain-openai
+langchain-chroma
 dashscope
 chromadb
-python-dotenv
-openai
-requests
-python-multipart
+pydantic
