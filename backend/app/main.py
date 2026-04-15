@@ -1,13 +1,13 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.schemas.chat_schema import ChatRequest, ChatResponse
+from app.schemas.chat_schema import ChatRequest
 from app.services.rag_service import rag_service
+from app.core.init_db import TRAVEL_KNOWLEDGE
 import uvicorn
-import os
 
 app = FastAPI(title="TravelHelper AI API")
 
-# 启用 CORS 跨域，允许前端连接
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,20 +16,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-async def root():
-    return {"message": "Welcome to TravelHelper AI API"}
-
-@app.post("/api/v1/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
+@app.on_event("startup")
+async def startup_event():
+    print("正在检查向量数据库状态...")
     try:
-        answer = await rag_service.get_travel_advice(
-            query=request.query, 
-            location=request.location
-        )
-        return ChatResponse(answer=answer)
+        rag_service.add_documents(TRAVEL_KNOWLEDGE)
+        print("知识库自动初始化完成！")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"初始化说明: {e}")
+
+@app.post("/api/v1/chat/stream")
+async def stream_chat(request: ChatRequest):
+    """SSE 流式对话接口"""
+    return StreamingResponse(
+        rag_service.stream_travel_advice(request.query, request.location),
+        media_type="text/event-stream"
+    )
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
