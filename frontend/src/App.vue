@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, nextTick } from 'vue';
-import { Send, Loader2, Plane, MapPin, User, Bot, Sparkles } from 'lucide-vue-next';
+import { Send, Loader2, Plane, MapPin, User, Bot, Sparkles, Mic, MicOff } from 'lucide-vue-next';
 import { marked } from 'marked';
 
 interface Message {
@@ -14,7 +14,43 @@ const messages = ref<Message[]>([
   { role: 'assistant', content: '✨ 你好呀！我是你的【全球视觉旅行助手】。\n\n无论你想去**冰岛**拍极光、去**巴黎**拍人文，还是想了解 **DJI Pocket 3** 的最佳参数，都能在这里找到答案。准备好跟我一起出发了吗？' }
 ]);
 const isLoading = ref(false);
+const isListening = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
+
+// 语音识别初始化
+const SpeechRecognition = window.SpeechRecognition || (window as any).webkitSpeechRecognition;
+const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+if (recognition) {
+  recognition.lang = 'zh-CN';
+  recognition.continuous = false;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event: any) => {
+    const transcript = Array.from(event.results)
+      .map((result: any) => result[0])
+      .map((result: any) => result.transcript)
+      .join('');
+    query.value = transcript;
+  };
+
+  recognition.onend = () => {
+    isListening.value = false;
+  };
+
+  recognition.onerror = () => {
+    isListening.value = false;
+  };
+}
+
+const toggleMic = () => {
+  if (!recognition) return alert('当前浏览器不支持语音识别');
+  if (isListening.value) {
+    recognition.stop();
+  } else {
+    isListening.value = true;
+    recognition.start();
+  }
+};
 
 const scrollToBottom = async () => {
   await nextTick();
@@ -134,6 +170,11 @@ const renderContent = (content: string) => {
 
       <footer class="input-area">
         <div class="input-container">
+          <button @click="toggleMic" :class="['mic-btn', { listening: isListening }]">
+            <Mic v-if="!isListening" :size="18" />
+            <div v-else class="pulse-ring"></div>
+            <MicOff v-if="isListening" :size="18" />
+          </button>
           <input v-model="query" @keyup.enter="sendMessage" placeholder="想去哪儿？问问我吧..." />
           <button @click="sendMessage" :disabled="isLoading" class="send-btn">
             <Send :size="18" />
@@ -243,7 +284,14 @@ body { margin: 0; background: #f8fafc; color: var(--text-main); height: 100vh; o
 /* 输入区 */
 .input-area { padding: 20px; background: transparent; }
 .input-container { background: white; border-radius: 30px; display: flex; padding: 8px 8px 8px 20px; align-items: center; gap: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
-.input-container input { flex: 1; border: none; outline: none; font-size: 15px; color: #1e293b; }
+.input-container input { flex: 1; border: none; outline: none; font-size: 15px; color: #1e293b; background: transparent; }
+
+/* 麦克风样式 */
+.mic-btn { width: 32px; height: 32px; border-radius: 50%; border: none; background: #f1f5f9; color: #64748b; cursor: pointer; display: flex; align-items: center; justify-content: center; position: relative; transition: all 0.3s; }
+.mic-btn.listening { background: #fee2e2; color: #ef4444; }
+.pulse-ring { position: absolute; width: 100%; height: 100%; border-radius: 50%; border: 2px solid #ef4444; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0% { transform: scale(1); opacity: 0.5; } 100% { transform: scale(1.8); opacity: 0; } }
+
 .send-btn { width: 40px; height: 40px; border-radius: 50%; background: var(--primary); border: none; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .send-btn:hover { transform: scale(1.05); filter: brightness(1.1); }
 
