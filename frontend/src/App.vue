@@ -18,9 +18,9 @@ interface Message {
 }
 
 const query = ref('');
-const location = ref('北京');
+const location = ref('');
 const messages = ref<Message[]>([
-  { role: 'assistant', content: '你好！我是你的 AI 旅游助手。你可以问我关于北京的**推荐美食**、**住宿**、**游玩路线**，或者让我教你如何用 **Pocket 3** 拍出大片！' }
+  { role: 'assistant', content: '你好！我是你的【全球视觉旅行助手】。🌎\n\n无论你想去**冰岛**拍极光、去**巴黎**拍人文，还是想了解 **DJI Pocket 3** 在任何环境下的最佳参数，我都能为你提供专业的行程表格、住宿地图及摄影建议。' }
 ]);
 const isLoading = ref(false);
 const chatContainer = ref<HTMLElement | null>(null);
@@ -85,8 +85,29 @@ const sendMessage = async () => {
   }
 };
 
-const setQuickQuery = (text: string) => {
-  query.value = text;
+const renderContent = (content: string) => {
+  if (!content) return '';
+  
+  // 1. 先进行标准 Markdown 渲染 (表格、图片)
+  // 将旧的不稳定 Unsplash 链接替换为更稳健的关键词获取方式
+  let html = marked(content);
+
+  // 2. 将 [MAP_LOCATION: 名称 | 地址 | 搜索词] 解析为动态搜索地图
+  // 我们使用 OpenStreetMap 或简单的 Google Map 搜索链接模拟
+  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (match, name, addr, search) => {
+    const query = encodeURIComponent(`${name} ${location.value}`);
+    return `<div class="map-card glass">
+      <div class="map-header">📍 酒店位置: ${name}</div>
+      <div class="map-placeholder">
+        <iframe width="100%" height="200" frameborder="0" scrolling="no" marginheight="0" marginwidth="0" 
+          src="https://maps.google.com/maps?q=${query}&t=&z=13&ie=UTF8&iwloc=&output=embed">
+        </iframe>
+      </div>
+      <div class="map-footer">${addr}</div>
+    </div>`;
+  });
+
+  return html;
 };
 </script>
 
@@ -120,16 +141,23 @@ const setQuickQuery = (text: string) => {
 
     <main class="chat-area">
       <div class="messages-container" ref="chatContainer">
-        <div v-for="(msg, index) in messages" :key="index" :class="['message-wrapper', msg.role]">
+        <div v-for="(msg, index) in messages" :key="index" 
+             :class="['message-wrapper', msg.role]">
           <div class="avatar">
             <Sparkles v-if="msg.role === 'assistant'" :size="20" />
             <div v-else class="user-avatar">ME</div>
           </div>
-          <div class="message-content glass" v-html="marked(msg.content)"></div>
-        </div>
-        <div v-if="isLoading && messages[messages.length-1].content === ''" class="message-wrapper assistant">
-          <div class="avatar spinning"><Loader2 :size="20" /></div>
-          <div class="message-content glass">AI 正在思考中...</div>
+          <!-- 如果消息内容为空且正在加载，显示加载状态 -->
+          <div v-if="msg.role === 'assistant' && msg.content === '' && isLoading" class="message-content glass">
+            <div class="loading-state">
+              <Loader2 :size="18" class="spinning" />
+              <span>AI 正在思考中...</span>
+            </div>
+          </div>
+          <!-- 渲染内容 -->
+          <div v-else class="message-content glass">
+            <div class="markdown-body" v-html="renderContent(msg.content)"></div>
+          </div>
         </div>
       </div>
 
@@ -173,5 +201,23 @@ const setQuickQuery = (text: string) => {
 .send-btn { width: 48px; height: 48px; border-radius: 12px; background: var(--accent-color); border: none; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .spinning { animation: spin 2s linear infinite; }
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.loading-state {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+}
+
+/* Markdown 高级样式 */
+:deep(.markdown-body table) { width: 100%; border-collapse: collapse; margin: 16px 0; background: rgba(255, 255, 255, 0.05); border-radius: 8px; overflow: hidden; }
+:deep(.markdown-body th) { background: var(--accent-color); color: #000; padding: 12px; text-align: left; }
+:deep(.markdown-body td) { padding: 12px; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
+:deep(.markdown-body img) { max-width: 100%; border-radius: 12px; margin: 12px 0; border: 2px solid var(--border-color); }
+
+/* 地图预览卡片 */
+.map-card { margin: 16px 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-color); background: #1e293b; }
+.map-header { padding: 10px 16px; border-bottom: 1px solid var(--border-color); font-weight: 600; }
+.map-footer { padding: 8px 16px; font-size: 12px; color: var(--text-secondary); }
+
 .footer { margin-top: auto; font-size: 12px; color: var(--text-secondary); text-align: center; }
 </style>
