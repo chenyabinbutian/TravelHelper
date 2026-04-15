@@ -55,7 +55,7 @@ class RAGService:
 
         # 核心修复：改用最纯粹的消息列表处理
         chain = (
-            RunnablePassthrough.assign(context=lambda x: self._format_docs(retriever.get_relevant_documents(x["input"])))
+            RunnablePassthrough.assign(context=lambda x: self._format_docs(retriever.invoke(x["input"])))
             | qa_prompt
             | self.llm
             | StrOutputParser()
