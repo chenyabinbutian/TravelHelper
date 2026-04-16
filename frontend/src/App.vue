@@ -132,10 +132,15 @@ const renderContent = (content: string) => {
   if (!content) return '';
   let html = marked.parse(content) as string;
   
-  // 匹配 [MAP_LOCATION: 名称 | 地址 | 搜索词]
-  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (_match: string, name: string, addr: string, search: string) => {
-    // 高德地图 URI 协议，支持直接唤起 App 或 H5 导航
-    const amapUrl = `https://uri.amap.com/search?keyword=${encodeURIComponent(search || name)}&center=&city=&view=map&src=TravelHelper&guide=1`;
+  // 匹配 [MAP_LOCATION: 内容]
+  html = html.replace(/\[MAP_LOCATION: (.*?)\]/g, (_match: string, fullContent: string) => {
+    // 灵活解析：支持 "名称 | 地址 | 搜索词" 或 直接是 "坐标/名称"
+    const parts = fullContent.split('|').map(p => p.trim());
+    const name = parts[0] || '目的地';
+    const addr = parts[1] || '点击查看详情';
+    const search = parts[2] || parts[0]; // 如果没搜到搜索词，就用名字
+    
+    const amapUrl = `https://uri.amap.com/search?keyword=${encodeURIComponent(search)}&src=TravelHelper&guide=1`;
     
     return `<div class="map-card" onclick="window.open('${amapUrl}', '_blank')">
       <div class="map-header">
