@@ -130,14 +130,22 @@ const sendMessage = async () => {
 
 const renderContent = (content: string) => {
   if (!content) return '';
-  // 显式断言为 string，防止 marked 返回 Promise 导致 TypeScript 报错
   let html = marked.parse(content) as string;
-  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (_match: string, name: string, addr: string) => {
-    const q = encodeURIComponent(`${name} ${location.value}`);
-    return `<div class="map-card">
-      <div class="map-header">📍 目的地: ${name}</div>
-      <iframe width="100%" height="180" frameborder="0" src="https://maps.google.com/maps?q=${q}&t=&z=14&ie=UTF8&iwloc=&output=embed"></iframe>
-      <div class="map-footer">${addr}</div>
+  
+  // 匹配 [MAP_LOCATION: 名称 | 地址 | 搜索词]
+  html = html.replace(/\[MAP_LOCATION: (.*?) \| (.*?) \| (.*?)\]/g, (_match: string, name: string, addr: string, search: string) => {
+    // 高德地图 URI 协议，支持直接唤起 App 或 H5 导航
+    const amapUrl = `https://uri.amap.com/search?keyword=${encodeURIComponent(search || name)}&center=&city=&view=map&src=TravelHelper&guide=1`;
+    
+    return `<div class="map-card" onclick="window.open('${amapUrl}', '_blank')">
+      <div class="map-header">
+        <div class="map-title">📍 ${name}</div>
+        <div class="map-action">点击导航 →</div>
+      </div>
+      <div class="map-body">
+         <div class="map-addr">${addr}</div>
+         <div class="map-hint">由高德地图提供位置支持</div>
+      </div>
     </div>`;
   });
   return html;
@@ -273,9 +281,35 @@ body { margin: 0; background: #f8fafc; color: var(--text-main); height: 100vh; o
 .bubble td li:last-child { border-bottom: none; }
 .bubble td li::before { content: "•"; color: var(--primary); margin-right: 8px; font-weight: bold; }
 
-.map-card { background: white; border-radius: 15px; overflow: hidden; border: 1px solid #e2e8f0; margin: 10px 0; }
-.map-header { padding: 10px; font-weight: 700; font-size: 13px; background: #f8fafc; }
-.map-footer { padding: 8px; font-size: 11px; color: #94a3b8; }
+.map-card { 
+  background: white; 
+  border-radius: 16px; 
+  overflow: hidden; 
+  border: 1px solid #e2e8f0; 
+  margin: 16px 0; 
+  cursor: pointer; 
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+.map-card:hover { 
+  transform: translateY(-4px); 
+  box-shadow: 0 12px 20px -5px rgba(0, 0, 0, 0.1); 
+  border-color: var(--primary);
+}
+.map-header { 
+  padding: 14px 18px; 
+  background: #f8fafc; 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center; 
+  border-bottom: 1px solid #f1f5f9;
+}
+.map-title { font-weight: 700; color: #1e293b; font-size: 14px; }
+.map-action { font-size: 12px; color: var(--primary); font-weight: 600; }
+.map-body { padding: 16px 18px; }
+.map-addr { font-size: 13px; color: #64748b; line-height: 1.5; margin-bottom: 8px; }
+.map-hint { font-size: 11px; color: #94a3b8; display: flex; align-items: center; gap: 4px; }
+.map-hint::before { content: ""; width: 6px; height: 6px; background: #10b981; border-radius: 50%; display: inline-block; }
 
 /* 输入区 */
 .input-area { padding: 20px; background: transparent; }
